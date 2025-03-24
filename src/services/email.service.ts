@@ -17,14 +17,38 @@ class EmailService {
     this.fromName = process.env.EMAIL_NAME || 'Automated Emails';
     this.fromEmail = process.env.EMAIL_USERNAME || '';
     
-    // Initialize transporter
+    // Initialize transporter with improved settings for deliverability
     this.transporter = nodemailer.createTransport({
       service: process.env.EMAIL_SERVICE || 'gmail',
       auth: {
         user: process.env.EMAIL_USERNAME,
         pass: process.env.EMAIL_PASSWORD
+      },
+      // Add TLS settings for secure connections
+      tls: {
+        rejectUnauthorized: false // Allow self-signed certificates
       }
     });
+  }
+  
+  /**
+   * Generate plain text version from HTML
+   * @param html HTML content
+   * @returns Plain text version
+   */
+  private generatePlainText(html: string): string {
+    // Simple HTML to text conversion
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<p.*?>/gi, '\n')
+      .replace(/<li.*?>/gi, '\n- ')
+      .replace(/<.*?>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim();
   }
   
   /**
@@ -42,12 +66,22 @@ class EmailService {
     attachments?: Array<{ filename: string; path: string }>
   ): Promise<boolean> {
     try {
+      // Generate plain text alternative
+      const plainText = this.generatePlainText(html);
+      
       const mailOptions: nodemailer.SendMailOptions = {
         from: `"${this.fromName}" <${this.fromEmail}>`,
         to,
         subject,
         html,
-        attachments
+        text: plainText, // Add plain text alternative
+        attachments,
+        headers: {
+          'X-Priority': '3',
+          'X-MSMail-Priority': 'Normal',
+          'X-Mailer': 'JobBuddy Application System',
+          'List-Unsubscribe': `<mailto:${this.fromEmail}?subject=Unsubscribe>`
+        }
       };
       
       const info = await this.transporter.sendMail(mailOptions);

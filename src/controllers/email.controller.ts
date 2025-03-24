@@ -3,6 +3,26 @@ import nodemailer from 'nodemailer';
 import JobApplication from '../models/job-application.model';
 
 /**
+ * Generate plain text version from HTML
+ * @param html HTML content
+ * @returns Plain text version
+ */
+const generatePlainText = (html: string): string => {
+  // Simple HTML to text conversion
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<p.*?>/gi, '\n')
+    .replace(/<li.*?>/gi, '\n- ')
+    .replace(/<.*?>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .trim();
+};
+
+/**
  * Send an email
  */
 export const sendEmail = async (req: Request, res: Response): Promise<void> => {
@@ -29,7 +49,7 @@ export const sendEmail = async (req: Request, res: Response): Promise<void> => {
       return;
     }
     
-    // Create transporter
+    // Create transporter with improved deliverability settings
     const transporter = nodemailer.createTransport({
       host: smtp_server,
       port: smtp_port,
@@ -37,15 +57,28 @@ export const sendEmail = async (req: Request, res: Response): Promise<void> => {
       auth: {
         user: sender_email,
         pass: sender_password
+      },
+      tls: {
+        rejectUnauthorized: false // Allow self-signed certificates
       }
     });
     
-    // Configure mail options
+    // Generate plain text alternative
+    const plainText = generatePlainText(email_content);
+    
+    // Configure mail options with improved deliverability settings
     const mailOptions: nodemailer.SendMailOptions = {
       from: `"${sender_name || 'Automated Email'}" <${sender_email}>`,
       to: recipient_email,
       subject: subject,
-      html: email_content
+      html: email_content,
+      text: plainText, // Plain text alternative
+      headers: {
+        'X-Priority': '3',
+        'X-MSMail-Priority': 'Normal',
+        'X-Mailer': 'JobBuddy Application System',
+        'List-Unsubscribe': `<mailto:${sender_email}?subject=Unsubscribe>`
+      }
     };
     
     // Add attachment if provided

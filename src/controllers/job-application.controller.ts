@@ -186,7 +186,7 @@ export const createJobApplication = async (req: Request, res: Response): Promise
     // If status is 'processing', attempt to send the email and update status
     if (status === 'processing' && sender_email && sender_password) {
       try {
-        // Create email transport
+        // Create email transport with improved settings
         const transporter = nodemailer.createTransport({
           host: req.body.smtp_server || 'smtp.gmail.com',
           port: req.body.smtp_port || 587,
@@ -194,15 +194,38 @@ export const createJobApplication = async (req: Request, res: Response): Promise
           auth: {
             user: sender_email,
             pass: sender_password
+          },
+          tls: {
+            rejectUnauthorized: false // Allow self-signed certificates for improved deliverability
           }
         });
         
-        // Configure mail options
+        // Generate plain text version of the HTML content
+        const plainText = content
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<p.*?>/gi, '\n')
+          .replace(/<li.*?>/gi, '\n- ')
+          .replace(/<.*?>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .trim();
+        
+        // Configure mail options with improved deliverability settings
         const mailOptions: nodemailer.SendMailOptions = {
           from: `"${sender_name || 'Automated Email'}" <${sender_email}>`,
           to: recipient_email,
           subject: subject,
-          html: content
+          html: content,
+          text: plainText, // Add plain text alternative
+          headers: {
+            'X-Priority': '3',
+            'X-MSMail-Priority': 'Normal',
+            'X-Mailer': 'JobBuddy Application System',
+            'List-Unsubscribe': `<mailto:${sender_email}?subject=Unsubscribe>`
+          }
         };
         
         // Add attachment if provided

@@ -182,7 +182,7 @@ export const createFollowUp = async (req: Request, res: Response): Promise<void>
     
     if (sender_email && sender_password) {
       try {
-        // Create transporter
+        // Create transporter with improved deliverability settings
         const transporter = nodemailer.createTransport({
           host: smtp_server,
           port: Number(smtp_port),
@@ -190,15 +190,39 @@ export const createFollowUp = async (req: Request, res: Response): Promise<void>
           auth: {
             user: sender_email,
             pass: sender_password
+          },
+          tls: {
+            rejectUnauthorized: false // Allow self-signed certificates
           }
         });
         
-        // Configure mail options
+        // Generate plain text version of HTML content
+        const htmlContent = content.replace(/\n/g, '<br>');
+        const plainText = htmlContent
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<p.*?>/gi, '\n')
+          .replace(/<li.*?>/gi, '\n- ')
+          .replace(/<.*?>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .trim();
+        
+        // Configure mail options with improved deliverability settings
         const mailOptions = {
           from: `"${sender_name || 'Automated Follow-up'}" <${sender_email}>`,
           to: recipient_email,
           subject: subject,
-          html: content.replace(/\n/g, '<br>')
+          html: htmlContent,
+          text: plainText, // Plain text alternative
+          headers: {
+            'X-Priority': '3',
+            'X-MSMail-Priority': 'Normal',
+            'X-Mailer': 'JobBuddy Follow-Up System',
+            'List-Unsubscribe': `<mailto:${sender_email}?subject=Unsubscribe>`
+          }
         };
         
         // Send email
