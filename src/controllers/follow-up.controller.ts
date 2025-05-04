@@ -21,8 +21,10 @@ export const getFollowUps = async (req: Request, res: Response): Promise<void> =
       sort_order = -1 
     } = req.query;
     
-    // Build query
-    const query: any = {};
+    // Build query with user context
+    const query: any = {
+      user: req.user._id
+    };
     
     if (recipient_email) query.recipient_email = recipient_email;
     if (company) query.company = company;
@@ -46,7 +48,6 @@ export const getFollowUps = async (req: Request, res: Response): Promise<void> =
       .limit(Number(limit))
       .skip(Number(skip));
     
-    // Return the follow-ups array directly
     res.status(200).json(followUps);
   } catch (error: any) {
     res.status(500).json({
@@ -61,8 +62,9 @@ export const getFollowUps = async (req: Request, res: Response): Promise<void> =
  */
 export const getDueFollowUps = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Find job applications due for follow-up
+    // Find job applications due for follow-up with user context
     const dueApplications = await JobApplication.find({
+      user: req.user._id,
       'follow_up_settings.next_follow_up_date': { $lte: Date.now() },
       'follow_up_settings.follow_up_count': { 
         $lt: { $ifNull: ['$follow_up_settings.max_count', 1] } 
@@ -70,7 +72,6 @@ export const getDueFollowUps = async (req: Request, res: Response): Promise<void
       status: 'sent' // Only process applications that are sent but not responded
     }).sort({ 'follow_up_settings.next_follow_up_date': 1 });
     
-    // Return the applications array directly
     res.status(200).json(dueApplications);
   } catch (error: any) {
     res.status(500).json({
@@ -96,7 +97,10 @@ export const getFollowUpById = async (req: Request, res: Response): Promise<void
       return;
     }
     
-    const followUp = await FollowUp.findById(id);
+    const followUp = await FollowUp.findOne({
+      _id: id,
+      user: req.user._id
+    });
     
     if (!followUp) {
       res.status(404).json({
@@ -106,7 +110,6 @@ export const getFollowUpById = async (req: Request, res: Response): Promise<void
       return;
     }
     
-    // Return the follow-up object directly
     res.status(200).json(followUp);
   } catch (error: any) {
     res.status(500).json({
@@ -147,8 +150,9 @@ export const createFollowUp = async (req: Request, res: Response): Promise<void>
       return;
     }
     
-    // Create follow-up record in database
+    // Create follow-up record in database with user context
     const followUp = await FollowUp.create({
+      user: req.user._id,
       recipient_email,
       subject,
       content,
@@ -164,8 +168,11 @@ export const createFollowUp = async (req: Request, res: Response): Promise<void>
     
     // Update original application if available
     if (original_application_id && mongoose.Types.ObjectId.isValid(original_application_id)) {
-      await JobApplication.findByIdAndUpdate(
-        original_application_id,
+      await JobApplication.findOneAndUpdate(
+        {
+          _id: original_application_id,
+          user: req.user._id
+        },
         {
           $inc: { 'follow_up_settings.follow_up_count': 1 },
           $set: {
@@ -182,65 +189,27 @@ export const createFollowUp = async (req: Request, res: Response): Promise<void>
     
     if (sender_email && sender_password) {
       try {
-        // Create transporter with improved deliverability settings
         const transporter = nodemailer.createTransport({
           host: smtp_server,
-          port: Number(smtp_port),
-          secure: Number(smtp_port) === 465, // true for 465, false for other ports
+          port: smtp_port,
+          secure: smtp_port === 465,
           auth: {
             user: sender_email,
             pass: sender_password
-          },
-          tls: {
-            rejectUnauthorized: false // Allow self-signed certificates
           }
         });
         
-        // Generate plain text version of HTML content
-        const htmlContent = content.replace(/\n/g, '<br>');
-        const plainText = htmlContent
-          .replace(/<br\s*\/?>/gi, '\n')
-          .replace(/<p.*?>/gi, '\n')
-          .replace(/<li.*?>/gi, '\n- ')
-          .replace(/<.*?>/g, '')
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .trim();
-        
-        // Configure mail options with improved deliverability settings
-        const mailOptions = {
-          from: `"${sender_name || 'Automated Follow-up'}" <${sender_email}>`,
+        await transporter.sendMail({
+          from: `"${sender_name || 'Job Application Follow-up'}" <${sender_email}>`,
           to: recipient_email,
           subject: subject,
-          html: htmlContent,
-          text: plainText, // Plain text alternative
-          headers: {
-            'X-Priority': '3',
-            'X-MSMail-Priority': 'Normal',
-            'X-Mailer': 'JobBuddy Follow-Up System',
-            'List-Unsubscribe': `<mailto:${sender_email}?subject=Unsubscribe>`
-          }
-        };
-        
-        // Send email
-        console.log('Attempting to send follow-up email with transporter:', {
-          host: smtp_server,
-          port: smtp_port,
-          secure: Number(smtp_port) === 465,
-          auth: { user: sender_email }
+          html: content
         });
         
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Follow-up email sent:', info.messageId);
         emailSent = true;
-      } catch (emailErr: any) {
-        console.error('Error sending follow-up email:', emailErr);
-        emailError = emailErr.message;
-        
-        // Update status to failed if email sending fails
+      } catch (error: any) {
+        emailError = error.message;
+        // Update follow-up status to failed
         await FollowUp.findByIdAndUpdate(followUp._id, { status: 'failed' });
       }
     }
@@ -252,7 +221,6 @@ export const createFollowUp = async (req: Request, res: Response): Promise<void>
       email_error: emailError
     });
   } catch (error: any) {
-    console.error('Error in createFollowUp:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Server Error'
@@ -279,8 +247,11 @@ export const updateFollowUp = async (req: Request, res: Response): Promise<void>
     // Add updated_at timestamp to the update payload
     const updateData = { ...req.body, updated_at: Date.now() };
     
-    const followUp = await FollowUp.findByIdAndUpdate(
-      id,
+    const followUp = await FollowUp.findOneAndUpdate(
+      {
+        _id: id,
+        user: req.user._id
+      },
       updateData,
       { new: true, runValidators: true }
     );
@@ -320,7 +291,10 @@ export const deleteFollowUp = async (req: Request, res: Response): Promise<void>
       return;
     }
     
-    const followUp = await FollowUp.findByIdAndDelete(id);
+    const followUp = await FollowUp.findOneAndDelete({
+      _id: id,
+      user: req.user._id
+    });
     
     if (!followUp) {
       res.status(404).json({

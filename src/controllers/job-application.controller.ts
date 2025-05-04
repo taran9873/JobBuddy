@@ -20,7 +20,9 @@ export const getJobApplications = async (req: Request, res: Response): Promise<v
     } = req.query;
     
     // Build query
-    const query: any = {};
+    const query: any = {
+      user: req.user._id
+    };
     
     if (recipient_email) query.recipient_email = recipient_email;
     if (company) query.company = company;
@@ -32,8 +34,7 @@ export const getJobApplications = async (req: Request, res: Response): Promise<v
     const sortOrder = Number(sort_order);
     const sortObj: Record<string, 1 | -1> = {};
     
-    // Ensure date fields are properly sorted by timestamp by using $toDate aggregation
-    // This handles the issue where MongoDB might sort string dates at date level only
+    // Ensure date fields are properly sorted by timestamp
     if (sortField === 'updated_at' || sortField === 'created_at' || sortField === 'sent_at') {
       sortObj[sortField] = sortOrder as 1 | -1;
     } else {
@@ -46,7 +47,6 @@ export const getJobApplications = async (req: Request, res: Response): Promise<v
       .limit(Number(limit))
       .skip(Number(skip));
     
-    // Return the applications array directly
     res.status(200).json(applications);
   } catch (error: any) {
     res.status(500).json({
@@ -80,13 +80,15 @@ export const getDraftApplications = async (req: Request, res: Response): Promise
       sortObj[sortField] = sortOrder as 1 | -1;
     }
     
-    // Find drafts
-    const drafts = await JobApplication.find({ status: 'draft' })
+    // Find drafts with user context
+    const drafts = await JobApplication.find({ 
+      status: 'draft',
+      user: req.user._id
+    })
       .sort(sortObj)
       .limit(Number(limit))
       .skip(Number(skip));
     
-    // Return the drafts array directly
     res.status(200).json(drafts);
   } catch (error: any) {
     res.status(500).json({
@@ -112,7 +114,10 @@ export const getJobApplicationById = async (req: Request, res: Response): Promis
       return;
     }
     
-    const application = await JobApplication.findById(id);
+    const application = await JobApplication.findOne({
+      _id: id,
+      user: req.user._id
+    });
     
     if (!application) {
       res.status(404).json({
@@ -122,7 +127,6 @@ export const getJobApplicationById = async (req: Request, res: Response): Promis
       return;
     }
     
-    // Return the application object directly
     res.status(200).json(application);
   } catch (error: any) {
     res.status(500).json({
@@ -166,8 +170,9 @@ export const createJobApplication = async (req: Request, res: Response): Promise
     let finalStatus = status;
     let emailError = null;
     
-    // Create new application with initial status
+    // Create new application with initial status and user context
     const application = await JobApplication.create({
+      user: req.user._id,
       recipient_email,
       subject,
       content,
@@ -190,13 +195,13 @@ export const createJobApplication = async (req: Request, res: Response): Promise
         const transporter = nodemailer.createTransport({
           host: req.body.smtp_server || 'smtp.gmail.com',
           port: req.body.smtp_port || 587,
-          secure: (req.body.smtp_port || 587) === 465, // true for 465, false for other ports
+          secure: (req.body.smtp_port || 587) === 465,
           auth: {
             user: sender_email,
             pass: sender_password
           },
           tls: {
-            rejectUnauthorized: false // Allow self-signed certificates for improved deliverability
+            rejectUnauthorized: false
           }
         });
         
@@ -213,13 +218,13 @@ export const createJobApplication = async (req: Request, res: Response): Promise
           .replace(/&quot;/g, '"')
           .trim();
         
-        // Configure mail options with improved deliverability settings
+        // Configure mail options
         const mailOptions: nodemailer.SendMailOptions = {
           from: `"${sender_name || 'Automated Email'}" <${sender_email}>`,
           to: recipient_email,
           subject: subject,
           html: content,
-          text: plainText, // Add plain text alternative
+          text: plainText,
           headers: {
             'X-Priority': '3',
             'X-MSMail-Priority': 'Normal',
@@ -228,7 +233,6 @@ export const createJobApplication = async (req: Request, res: Response): Promise
           }
         };
         
-        // Add attachment if provided
         if (attachment_path) {
           mailOptions.attachments = [
             {
@@ -249,24 +253,26 @@ export const createJobApplication = async (req: Request, res: Response): Promise
             sent_at: Date.now()
           }
         );
-        finalStatus = 'sent';
-      } catch (err: any) {
-        // If email sending fails, update status to 'failed'
-        emailError = err.message || 'Failed to send email';
+        
+        res.status(201).json(application);
+      } catch (error: any) {
+        // Update application status to 'failed'
         await JobApplication.findByIdAndUpdate(
           application._id,
-          { status: 'failed', updated_at: Date.now() }
+          { 
+            status: 'failed', 
+            updated_at: Date.now()
+          }
         );
-        finalStatus = 'failed';
+        
+        res.status(500).json({
+          success: false,
+          error: error.message || 'Failed to send email'
+        });
       }
+    } else {
+      res.status(201).json(application);
     }
-    
-    res.status(201).json({
-      id: application._id,
-      success: true,
-      status: finalStatus,
-      error: emailError
-    });
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -291,14 +297,17 @@ export const updateJobApplication = async (req: Request, res: Response): Promise
       return;
     }
     
-    // Add updated_at timestamp to the update payload
-    const updateData = { ...req.body, updated_at: Date.now() };
-    
-    // Find and update application
-    const application = await JobApplication.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
+    // Find and update application with user context
+    const application = await JobApplication.findOneAndUpdate(
+      {
+        _id: id,
+        user: req.user._id
+      },
+      {
+        ...req.body,
+        updated_at: Date.now()
+      },
+      { new: true }
     );
     
     if (!application) {
@@ -309,9 +318,7 @@ export const updateJobApplication = async (req: Request, res: Response): Promise
       return;
     }
     
-    res.status(200).json({
-      success: true
-    });
+    res.status(200).json(application);
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -336,7 +343,11 @@ export const deleteJobApplication = async (req: Request, res: Response): Promise
       return;
     }
     
-    const application = await JobApplication.findByIdAndDelete(id);
+    // Delete application with user context
+    const application = await JobApplication.findOneAndDelete({
+      _id: id,
+      user: req.user._id
+    });
     
     if (!application) {
       res.status(404).json({
@@ -347,7 +358,8 @@ export const deleteJobApplication = async (req: Request, res: Response): Promise
     }
     
     res.status(200).json({
-      success: true
+      success: true,
+      message: 'Job application deleted successfully'
     });
   } catch (error: any) {
     res.status(500).json({

@@ -9,6 +9,7 @@ import emailRoutes from './routes/email.route';
 import emailTemplateRoutes from './routes/email-template.routes';
 import { errorHandler, notFound } from './middleware/error.middleware';
 import mongoose from 'mongoose';
+import userRoutes from './routes/user.routes';
 
 // Load environment variables
 dotenv.config();
@@ -56,6 +57,7 @@ app.use('/api/applications', jobApplicationRoutes);
 app.use('/api/followups', followUpRoutes);
 app.use('/api/email-templates', emailTemplateRoutes);
 app.use('/api', emailRoutes);
+app.use('/api/users', userRoutes);
 
 // Health check route
 app.get('/api/health', async (req: Request, res: Response) => {

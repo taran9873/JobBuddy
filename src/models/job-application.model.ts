@@ -11,6 +11,7 @@ export interface IFollowUpSettings {
 }
 
 export interface IJobApplication extends Document {
+  user: mongoose.Types.ObjectId;
   recipient_email: string;
   company: string;
   position: string;
@@ -48,6 +49,12 @@ const FollowUpSettingsSchema = new Schema<IFollowUpSettings>({
 
 // Define the job application schema
 const JobApplicationSchema = new Schema<IJobApplication>({
+  user: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'User',
+    required: true,
+    index: true
+  },
   recipient_email: { type: String, required: true, index: true },
   company: { type: String, index: true },
   position: { type: String },
@@ -75,9 +82,9 @@ const JobApplicationSchema = new Schema<IJobApplication>({
 });
 
 // Create indexes for better query performance
-JobApplicationSchema.index({ created_at: -1 });
-JobApplicationSchema.index({ updated_at: -1 });
-JobApplicationSchema.index({ sent_at: -1 });
+JobApplicationSchema.index({ user: 1, created_at: -1 });
+JobApplicationSchema.index({ user: 1, updated_at: -1 });
+JobApplicationSchema.index({ user: 1, sent_at: -1 });
 
 // Create and export the model
 export default mongoose.model<IJobApplication>('JobApplication', JobApplicationSchema); 

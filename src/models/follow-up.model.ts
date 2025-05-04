@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IFollowUp extends Document {
+  user: mongoose.Types.ObjectId;
   recipient_email: string;
   company: string | null;
   position: string | null;
@@ -15,6 +16,12 @@ export interface IFollowUp extends Document {
 }
 
 const FollowUpSchema = new Schema<IFollowUp>({
+  user: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'User',
+    required: true,
+    index: true
+  },
   recipient_email: { type: String, required: true, index: true },
   company: { type: String },
   position: { type: String },
@@ -40,9 +47,9 @@ const FollowUpSchema = new Schema<IFollowUp>({
 });
 
 // Create indexes for better query performance
-FollowUpSchema.index({ original_application_id: 1 });
-FollowUpSchema.index({ created_at: -1 });
-FollowUpSchema.index({ updated_at: -1 });
-FollowUpSchema.index({ sent_at: -1 });
+FollowUpSchema.index({ user: 1, original_application_id: 1 });
+FollowUpSchema.index({ user: 1, created_at: -1 });
+FollowUpSchema.index({ user: 1, updated_at: -1 });
+FollowUpSchema.index({ user: 1, sent_at: -1 });
 
 export default mongoose.model<IFollowUp>('FollowUp', FollowUpSchema); 

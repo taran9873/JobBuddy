@@ -7,8 +7,12 @@ import {
   deleteJobApplication,
   getDraftApplications
 } from '../controllers/job-application.controller';
+import { authenticate } from '../middleware/auth.middleware';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // Route: /api/applications
 router.route('/')
