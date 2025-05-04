@@ -1,18 +1,22 @@
 import app from './app';
 import connectDB from './config/database';
 import dotenv from 'dotenv';
+import { initializeDefaultTemplates } from './utils/default-templates';
 
 // Load environment variables
 dotenv.config();
 
 // Set port
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8081;
 
 // Start server
 const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
+    
+    // Initialize default email templates
+    await initializeDefaultTemplates();
     
     // Start Express server
     app.listen(port, () => {

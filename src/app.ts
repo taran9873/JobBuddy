@@ -6,6 +6,7 @@ import { json, urlencoded } from 'express';
 import jobApplicationRoutes from './routes/job-application.route';
 import followUpRoutes from './routes/follow-up.route';
 import emailRoutes from './routes/email.route';
+import emailTemplateRoutes from './routes/email-template.routes';
 import { errorHandler, notFound } from './middleware/error.middleware';
 import mongoose from 'mongoose';
 
@@ -53,8 +54,7 @@ app.use(urlencoded({ extended: true })); // Parse URL-encoded request body
 // Routes
 app.use('/api/applications', jobApplicationRoutes);
 app.use('/api/followups', followUpRoutes);
-
-// Email routes (placed directly at /api level)
+app.use('/api/email-templates', emailTemplateRoutes);
 app.use('/api', emailRoutes);
 
 // Health check route
