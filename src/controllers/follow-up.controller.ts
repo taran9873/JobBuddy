@@ -23,7 +23,7 @@ export const getFollowUps = async (req: Request, res: Response): Promise<void> =
     
     // Build query with user context
     const query: any = {
-      user: req.user._id
+      user: req.user?._id
     };
     
     if (recipient_email) query.recipient_email = recipient_email;
@@ -64,7 +64,7 @@ export const getDueFollowUps = async (req: Request, res: Response): Promise<void
   try {
     // Find job applications due for follow-up with user context
     const dueApplications = await JobApplication.find({
-      user: req.user._id,
+      user: req.user?._id,
       'follow_up_settings.next_follow_up_date': { $lte: Date.now() },
       'follow_up_settings.follow_up_count': { 
         $lt: { $ifNull: ['$follow_up_settings.max_count', 1] } 
@@ -99,7 +99,7 @@ export const getFollowUpById = async (req: Request, res: Response): Promise<void
     
     const followUp = await FollowUp.findOne({
       _id: id,
-      user: req.user._id
+      user: req.user?._id
     });
     
     if (!followUp) {
@@ -152,7 +152,7 @@ export const createFollowUp = async (req: Request, res: Response): Promise<void>
     
     // Create follow-up record in database with user context
     const followUp = await FollowUp.create({
-      user: req.user._id,
+      user: req.user?._id,
       recipient_email,
       subject,
       content,
@@ -171,7 +171,7 @@ export const createFollowUp = async (req: Request, res: Response): Promise<void>
       await JobApplication.findOneAndUpdate(
         {
           _id: original_application_id,
-          user: req.user._id
+          user: req.user?._id
         },
         {
           $inc: { 'follow_up_settings.follow_up_count': 1 },
@@ -250,7 +250,7 @@ export const updateFollowUp = async (req: Request, res: Response): Promise<void>
     const followUp = await FollowUp.findOneAndUpdate(
       {
         _id: id,
-        user: req.user._id
+        user: req.user?._id
       },
       updateData,
       { new: true, runValidators: true }
@@ -293,7 +293,7 @@ export const deleteFollowUp = async (req: Request, res: Response): Promise<void>
     
     const followUp = await FollowUp.findOneAndDelete({
       _id: id,
-      user: req.user._id
+      user: req.user?._id
     });
     
     if (!followUp) {

@@ -21,7 +21,7 @@ export const getJobApplications = async (req: Request, res: Response): Promise<v
     
     // Build query
     const query: any = {
-      user: req.user._id
+      user: req.user?._id
     };
     
     if (recipient_email) query.recipient_email = recipient_email;
@@ -83,7 +83,7 @@ export const getDraftApplications = async (req: Request, res: Response): Promise
     // Find drafts with user context
     const drafts = await JobApplication.find({ 
       status: 'draft',
-      user: req.user._id
+      user: req.user?._id
     })
       .sort(sortObj)
       .limit(Number(limit))
@@ -116,7 +116,7 @@ export const getJobApplicationById = async (req: Request, res: Response): Promis
     
     const application = await JobApplication.findOne({
       _id: id,
-      user: req.user._id
+      user: req.user?._id
     });
     
     if (!application) {
@@ -172,7 +172,7 @@ export const createJobApplication = async (req: Request, res: Response): Promise
     
     // Create new application with initial status and user context
     const application = await JobApplication.create({
-      user: req.user._id,
+      user: req.user?._id,
       recipient_email,
       subject,
       content,
@@ -301,7 +301,7 @@ export const updateJobApplication = async (req: Request, res: Response): Promise
     const application = await JobApplication.findOneAndUpdate(
       {
         _id: id,
-        user: req.user._id
+        user: req.user?._id
       },
       {
         ...req.body,
@@ -346,7 +346,7 @@ export const deleteJobApplication = async (req: Request, res: Response): Promise
     // Delete application with user context
     const application = await JobApplication.findOneAndDelete({
       _id: id,
-      user: req.user._id
+      user: req.user?._id
     });
     
     if (!application) {
