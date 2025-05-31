@@ -17,6 +17,12 @@ class EmailService {
     this.fromName = process.env.EMAIL_NAME || 'Automated Emails';
     this.fromEmail = process.env.EMAIL_USERNAME || '';
     
+    // Validate required environment variables
+    if (!process.env.EMAIL_USERNAME || !process.env.EMAIL_PASSWORD) {
+      console.error('Missing required email credentials. Please set EMAIL_USERNAME and EMAIL_PASSWORD in your .env file');
+      throw new Error('Missing email credentials');
+    }
+    
     // Initialize transporter with improved settings for deliverability
     this.transporter = nodemailer.createTransport({
       service: process.env.EMAIL_SERVICE || 'gmail',
@@ -28,6 +34,15 @@ class EmailService {
       tls: {
         rejectUnauthorized: false // Allow self-signed certificates
       }
+    });
+
+    // Verify transporter configuration
+    this.transporter.verify((error, success) => {
+      if (error) {
+        console.error('Email service configuration error:', error);
+        throw new Error('Failed to configure email service: ' + error.message);
+      }
+      console.log('Email service is ready to send messages');
     });
   }
   
@@ -66,6 +81,10 @@ class EmailService {
     attachments?: Array<{ filename: string; path: string }>
   ): Promise<boolean> {
     try {
+      if (!this.fromEmail) {
+        throw new Error('Email service not properly configured');
+      }
+
       // Generate plain text alternative
       const plainText = this.generatePlainText(html);
       
@@ -74,7 +93,7 @@ class EmailService {
         to,
         subject,
         html,
-        text: plainText, // Add plain text alternative
+        text: plainText,
         attachments,
         headers: {
           'X-Priority': '3',
@@ -85,11 +104,11 @@ class EmailService {
       };
       
       const info = await this.transporter.sendMail(mailOptions);
-      console.log(`Email sent: ${info.messageId}`);
+      console.log(`Email sent successfully to ${to}: ${info.messageId}`);
       return true;
-    } catch (error) {
-      console.error('Failed to send email:', error);
-      return false;
+    } catch (error: any) {
+      console.error(`Failed to send email to ${to}:`, error);
+      throw new Error(`Failed to send email: ${error.message}`);
     }
   }
   
@@ -130,10 +149,10 @@ class EmailService {
     to: string, 
     subject: string, 
     content: string, 
-    originalApplication: { company: string; position: string; sentDate: Date }
+    originalApplication: { company: string; position: string; sentDate: Date | string | number }
   ): Promise<boolean> {
     // Format date
-    const sentDate = originalApplication.sentDate.toLocaleDateString('en-US', {
+    const sentDate = new Date(originalApplication.sentDate).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'

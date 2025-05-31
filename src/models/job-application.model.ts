@@ -1,4 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { DateUtils } from '../utils/date.utils';
+import { schedulerConfig } from '../config/scheduler.config';
 
 // Define interfaces
 export interface IFollowUpSettings {
@@ -8,6 +10,8 @@ export interface IFollowUpSettings {
   follow_up_count: number;
   last_follow_up_date: number | null;
   next_follow_up_date: number;
+  timezone: string;
+  calculateNextFollowUpDate(): number;
 }
 
 export interface IJobApplication extends Document {
@@ -41,10 +45,24 @@ const FollowUpSettingsSchema = new Schema<IFollowUpSettings>({
   last_follow_up_date: { type: Number, default: null },
   next_follow_up_date: { 
     type: Number, 
-    default: function() {
-      return Date.now() + 3 * 24 * 60 * 60 * 1000; // 3 days from now
-    }
+    default: null
+  },
+  timezone: { 
+    type: String, 
+    default: schedulerConfig.timezone 
   }
+});
+
+// Add pre-save middleware to set next_follow_up_date
+FollowUpSettingsSchema.pre('save', function(next) {
+  if (!this.next_follow_up_date) {
+    this.next_follow_up_date = DateUtils.calculateNextFollowUpDate(
+      new Date(),
+      this.interval_days,
+      this.timezone
+    ).getTime();
+  }
+  next();
 });
 
 // Define the job application schema
@@ -85,6 +103,51 @@ const JobApplicationSchema = new Schema<IJobApplication>({
 JobApplicationSchema.index({ user: 1, created_at: -1 });
 JobApplicationSchema.index({ user: 1, updated_at: -1 });
 JobApplicationSchema.index({ user: 1, sent_at: -1 });
+JobApplicationSchema.index({ 'follow_up_settings.next_follow_up_date': 1 });
+
+// Add validation for follow-up settings
+FollowUpSettingsSchema.pre('validate', function(next) {
+  const settings = this;
+  
+  // Validate interval days
+  if (settings.interval_days < 1) {
+    this.invalidate('interval_days', 'Interval days must be at least 1');
+  }
+  
+  // Validate max count
+  if (settings.max_count < 1) {
+    this.invalidate('max_count', 'Max count must be at least 1');
+  }
+  
+  // Validate follow-up count
+  if (settings.follow_up_count < 0) {
+    this.invalidate('follow_up_count', 'Follow-up count cannot be negative');
+  }
+  
+  // Validate next follow-up date
+  if (settings.next_follow_up_date) {
+    try {
+      const nextDate = new Date(settings.next_follow_up_date);
+      if (!DateUtils.isFutureDate(nextDate, settings.timezone)) {
+        this.invalidate('next_follow_up_date', 'Next follow-up date must be in the future');
+      }
+    } catch (error) {
+      this.invalidate('next_follow_up_date', 'Invalid next follow-up date');
+    }
+  }
+  
+  next();
+});
+
+// Add method to calculate next follow-up date
+FollowUpSettingsSchema.methods.calculateNextFollowUpDate = function(): number {
+  const now = new Date();
+  return DateUtils.calculateNextFollowUpDate(
+    now,
+    this.interval_days,
+    this.timezone
+  ).getTime();
+};
 
 // Create and export the model
 export default mongoose.model<IJobApplication>('JobApplication', JobApplicationSchema); 
